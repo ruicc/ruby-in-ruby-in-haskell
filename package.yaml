@@ -35,6 +35,7 @@ executables:
     - -with-rtsopts=-N
     dependencies:
     - ruby-in-ruby
+    - mtl
 
 tests:
   ruby-in-ruby-test:
