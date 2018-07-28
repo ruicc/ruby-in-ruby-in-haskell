@@ -1,20 +1,61 @@
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module Main where
 
-import Control.Monad.State.Strict
-import Prelude hiding (max)
-import qualified Prelude as P (max)
+import qualified Data.Vector as V
+import qualified Data.Vector.Mutable as VM
+import Data.List (intersperse)
+import Data.Map.Strict as Map
+import Control.Monad
+import Lib
 
-main :: IO ()
 main = do
---    print expr1
---    print $ eval expr1
---    print $ max expr1
-    eval $ Stmts (FuncCall (Lit 34)) (FuncCall expr1)
-    eval $ Stmts (VarAssign "x" (Lit 1)) (VarAssign "y" (Mul (Lit 2) (Lit 3)))
+    putStrLn " * Calculate num"
+    void $ runRuby emptyREnv $ eval $ Stmts [FuncCall "p" [Lit 34], FuncCall "p" [expr1]]
+    putStrLn " * VarAssign/VarRef"
+    void $ runRuby emptyREnv $ eval $ Stmts
+        [ VarAssign "x" (Lit 1)
+        , VarAssign "y" (Add (Lit 2) (VarRef "x"))
+        , FuncCall "p" [VarRef "y"]
+        ]
+    putStrLn " * While"
+    void $ runRuby emptyREnv $ eval $ Stmts
+        [ VarAssign "i" (Lit 0)
+        , While
+            (Lt (VarRef "i") (Lit 10))
+            (Stmts
+                [ FuncCall "p" [VarRef "i"]
+                , VarAssign "i" (Add (VarRef "i") (Lit 1))
+                ])
+        ]
+    putStrLn " * User function definition"
+    void $ runRuby emptyREnv $ eval $ Stmts
+        [ FuncDef "add" ["x", "y"] (Add (VarRef "x") (VarRef "y"))
+        , FuncCall "p" [FuncCall "add" [Lit 1, Lit 2]]
+        ]
+    putStrLn " * Function scope"
+    void $ runRuby emptyREnv $ eval $ Stmts
+        [ FuncDef "foo" [] (Stmts [VarAssign "x" (Lit 0), FuncCall "p" [VarRef "x"]])
+        , VarAssign "x" (Lit 1)
+        , FuncCall "foo" []
+        , FuncCall "p" [VarRef "x"]
+        ]
+    putStrLn " * fib"
+    void $ runRuby emptyREnv $ eval $ Stmts
+        [ FuncDef "fib" ["x"] (If (Lt (VarRef "x") (Lit 2)) (VarRef "x") (Add
+                    (FuncCall "fib" [Sub (VarRef "x") (Lit 1)])
+                    (FuncCall "fib" [Sub (VarRef "x") (Lit 2)])
+                )
+            )
+        , FuncCall "p" [FuncCall "fib" [Lit 5]]
+        , FuncCall "p" [FuncCall "fib" [Lit 7]]
+        , FuncCall "p" [FuncCall "fib" [Lit 9]]
+        ]
 
-expr1 :: Expr Int
+expr1 :: Expr
 expr1 =
     Mul
         (Mul
@@ -32,71 +73,4 @@ expr1 =
                 (Lit 8))
             (Lit 9))
 
-data REnv = REnv {
-    renvVariables :: Map String RValue
-}
-data RValue = RVInt Int | RVUnit
-
-class FromRValue a where
-    fromRValue :: RValue -> Maybe a
-class ToRValue a where
-    toRValue :: a -> RValue
-
-instance FromRValue Int where
-    fromRValue (RVInt i) = Just i
-    fromRValue _ = Nothing
-instance FromRValue () where
-    fromRValue RVUnit = Just ()
-    fromRValue _ = Nothing
-instance ToRValue Int where
-    toRValue i = RVInt i
-instance ToRValue () where
-    toRValue _ = RVUnit
-
-newtype RInt = RInt Int
-newtype RUnit = RUnit
-
-newtype Ruby a = Ruby { unRuby :: StateT REnv IO a }
-
-runRuby :: Ruby a -> REnv -> IO a
-runRuby ruby env = evalStateT (unRuby ruby) env
-
-data Expr :: * -> * where
-    Lit :: Int -> Expr RInt
-    Add :: Expr RInt -> Expr RInt -> Expr RInt
-    Sub :: Expr RInt -> Expr RInt -> Expr RInt
-    Mul :: Expr RInt -> Expr RInt -> Expr RInt
-    Div :: Expr RInt -> Expr RInt -> Expr RInt
-    Stmts :: Expr b -> Expr r -> Expr r
-    FuncCall :: RValue r => Expr r -> Expr RUnit
-    VarAssign :: RValue r => String -> Expr r -> Expr RUnit
-    VarRef :: RValue r => String -> Expr r
-
-instance Show r => Show (Expr r) where
-    show (Lit l) = "Lit " ++ show l
-    show (Add e1 e2) = "Add (" ++ show e1 ++ ") (" ++ show e2 ++ ")"
-    show (Sub e1 e2) = "Sub (" ++ show e1 ++ ") (" ++ show e2 ++ ")"
-    show (Mul e1 e2) = "Mul (" ++ show e1 ++ ") (" ++ show e2 ++ ")"
-    show (Div e1 e2) = "Div (" ++ show e1 ++ ") (" ++ show e2 ++ ")"
-    show (Stmts e1 e2) = "Stmts (" ++ show e1 ++ ") (" ++ show e2 ++ ")"
-    show (FuncCall e) = "FuncCall (" ++ show e ++ ")"
-    show (VarAssign sym e) = "VarAssign \"" ++ sym ++ "\" (" ++ show e ++ ")"
-
-eval :: REnv -> Expr r -> Ruby r
-eval _ (Lit l) = return $ RInt l
-eval _ (Add e1 e2) = (+) <$> (eval e1) <*> (eval e2)
-eval _ (Sub e1 e2) = (-) <$> (eval e1) <*> (eval e2)
-eval _ (Mul e1 e2) = (*) <$> (eval e1) <*> (eval e2)
-eval _ (Div e1 e2) = div <$> (eval e1) <*> (eval e2)
-eval _ (Stmts e1 e2) = eval e1 >> eval e2
-eval _ (FuncCall e) = eval e >>= print
-eval _ (VarAssign sym e) =
-eval _ (VarRef sym) =
-
---max :: Expr -> Int
---max (Lit l) = l
---max (Add e1 e2) = P.max (max e1) (max e2)
---max (Sub e1 e2) = P.max (max e1) (max e2)
---max (Mul e1 e2) = P.max (max e1) (max e2)
---max (Div e1 e2) = P.max (max e1) (max e2)
 

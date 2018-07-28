@@ -24,6 +24,10 @@ dependencies:
 
 library:
   source-dirs: src
+  dependencies:
+  - mtl
+  - containers
+  - vector
 
 executables:
   ruby-in-ruby:
@@ -36,6 +40,8 @@ executables:
     dependencies:
     - ruby-in-ruby
     - mtl
+    - containers
+    - vector
 
 tests:
   ruby-in-ruby-test:
