@@ -54,6 +54,19 @@ main = do
         , FuncCall "p" [FuncCall "fib" [Lit 7]]
         , FuncCall "p" [FuncCall "fib" [Lit 9]]
         ]
+    putStrLn " * array assign"
+    void $ runRuby emptyREnv $ eval $ Stmts
+        [ VarAssign "ary" (AryNew [Lit 1])
+        , AryAssign (VarRef "ary") (Lit 0) (Lit 42)
+        , FuncCall "p" [AryRef (VarRef "ary") (Lit 0)]
+        ]
+    putStrLn " * array assign"
+    void $ runRuby emptyREnv $ eval $ Stmts
+        [ VarAssign "hash" (HashNew [(Lit 0, Lit 3), (Lit 1, Lit 4)])
+        , AryAssign (VarRef "hash") (Lit 0) (Lit 43)
+        , FuncCall "p" [AryRef (VarRef "hash") (Lit 0)]
+        , FuncCall "p" [VarRef "hash"]
+        ]
 
 expr1 :: Expr
 expr1 =

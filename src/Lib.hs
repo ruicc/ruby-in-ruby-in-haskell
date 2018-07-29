@@ -7,6 +7,7 @@ module Lib where
 
 import qualified Data.Vector as V
 import qualified Data.Vector.Mutable as VM
+import Data.IORef
 import Data.List (intersperse)
 import Data.Map.Strict as Map
 import Control.Monad.State.Strict
@@ -21,7 +22,8 @@ data RValue
     = RInt !Int
     | RBool !Bool
     | RUnit
-    | RAry (VM.IOVector RValue)
+    | RAry !(VM.IOVector RValue)
+    | RHash !(IORef (Map.Map Int RValue))
 
 data RFunc
     = RBuiltIn String
@@ -40,6 +42,15 @@ instance EqIO RValue where
                 v1 `eqIO` v2
             return $ all id bools
         else return False
+    eqIO (RHash hxref) (RHash hyref) = do
+        hx <- readIORef hxref
+        hy <- readIORef hyref
+        bools <- forM (toList hx) $ \(k1,v1) -> do
+            case Map.lookup k1 hy of
+                Just v2 -> v1 `eqIO` v2
+                Nothing -> return False
+        return $ all id bools
+    eqIO _ _ = return False
 
 instance ShowIO RValue where
     showIO (RInt n) = return $ "RInt " ++ show n
@@ -49,6 +60,12 @@ instance ShowIO RValue where
         ls <- V.toList <$> V.freeze vec
         showList <- mapM showIO ls
         return $ "RAry " ++ (concat $ intersperse "," showList)
+    showIO (RHash hashRef) = do
+        hash <- readIORef hashRef
+        strList <- forM (toList hash) $ \(k,v) -> do
+            str <- showIO v
+            return $ "(" ++ show k ++ "," ++ str ++ ")"
+        return $ "RHash [" ++ (concat $ intersperse "," strList) ++ "]"
 
 
 emptyREnv :: REnv
@@ -56,7 +73,7 @@ emptyREnv = REnv genvVariables empty
 
 genvVariables :: Map String RFunc
 genvVariables = fromList [
-    ("p", RBuiltIn "p")
+        ("p", RBuiltIn "p")
     ]
 
 newtype Ruby a = Ruby { unRuby :: StateT REnv IO a }
@@ -84,6 +101,7 @@ data Expr where
     AryNew :: [Expr] -> Expr
     AryRef :: Expr -> Expr -> Expr
     AryAssign :: Expr -> Expr -> Expr -> Expr
+    HashNew :: [(Expr, Expr)] -> Expr
     deriving Show
 
 callBuiltinFunction :: String -> [RValue] -> Ruby (Maybe RValue)
@@ -187,26 +205,44 @@ eval (AryNew es) = do
 eval (AryRef eAry eIdx) = do
     ary <- eval eAry
     idx <- eval eIdx
-    let vec :: VM.IOVector RValue = case ary of
-            RAry vs -> vs
-            _ -> error "Expected RAry"
-        ix :: Int = case idx of
+    let ix :: Int = case idx of
             RInt n -> n
             _ -> error "Expected RInt"
-    v <- liftIO $ VM.read vec ix
-    return v
-eval (AryAssign eary eidx e) = do
-    ary <- eval eary
-    idx <- eval eidx
+    case ary of
+        RAry vec -> do
+            -- TODO: out of range
+            v <- liftIO $ VM.read vec ix
+            return v
+        RHash ref -> do
+            hash <- liftIO $ readIORef ref
+            case Map.lookup ix hash of
+                Just v -> return v
+                Nothing -> return RUnit
+        _ -> error "Expected RAry"
+eval (AryAssign eAry eIdx e) = do
+    ary <- eval eAry
+    idx <- eval eIdx
     v <- eval e
-    let vec = case ary of
-            RAry vs -> vs
-            _ -> error "Expected RAry"
-        ix = case idx of
+    let ix = case idx of
             RInt n -> n
             _ -> error "Expected RInt"
-    liftIO $ VM.write vec ix v
-    return RUnit
-
+    case ary of
+        RAry vec -> do
+            liftIO $ VM.write vec ix v
+            return RUnit
+        RHash ref -> liftIO $ atomicModifyIORef' ref $ \hash ->
+            let hash' = Map.insert ix v hash
+            in (hash', RUnit)
+        _ -> error "Expected RAry"
+eval (HashNew es) = do
+    kvs <- forM es $ \(ek,ev) -> do
+        k <- eval ek
+        let ix = case k of
+                RInt n -> n
+                _ -> error "Expected RInt"
+        v <- eval ev
+        return (ix,v)
+    hsh <- liftIO $ newIORef $ Map.fromList kvs
+    return $ RHash hsh
 
 
