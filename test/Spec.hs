@@ -2,13 +2,14 @@
 import Lib
 import Control.Monad
 
-main = do
-    src <- readFile "./test.rb"
-    let expr = parse src
-    runRuby emptyREnv $ eval expr
+import Control.Applicative
+import Text.Trifecta
 
-test' :: IO ()
-test' = do
+main = do
+    testParser
+
+testEval :: IO ()
+testEval = do
     putStrLn " * Calculate num"
     void $ runRuby emptyREnv $ eval $ Stmts [FuncCall "p" [Lit 34], FuncCall "p" [expr1]]
     putStrLn " * VarAssign/VarRef"
@@ -84,3 +85,52 @@ expr1 =
             (Lit 9))
 
 
+
+testParser = do
+    putStrLn ""
+--    print $ parseString parseExpr mempty "( 1 + ( 2 + 3 ) )"
+--    print $ parseString parseExpr mempty "((1 + 2) + 3)"
+--    print $ parseString parseExpr mempty "(1 + 2 + 3)"
+--    print $ parseString expr mempty "( 1 * 100 + 2 * 10 + 3 * 1 )"
+    print $ parseString numExpr mempty "p 1 + 2 + 3"
+
+--data E
+--    = A E E -- ^ expr + expr
+--    | M E E
+--    | L Integer   -- ^ 1, 2, -345, …
+--    deriving (Show)
+
+--parseExpr :: Parser E
+--parseExpr = parseAdd <|> parseLit
+--  where
+--    parseAdd = parens $ do
+--        x <- parseExpr
+--        _ <- symbolic '+'
+--        y <- parseExpr
+--        pure (A x y)
+--    parseLit = L <$> integer
+
+
+parseExpr = parseStmt
+
+parseStmt :: Parser Expr
+parseStmt
+     =  parseFuncDef
+    <|> parseWhile
+    <|> parseIf
+    <|> parseCallFunc
+    <|> parseVarAssign
+    <|> parseAryAssign
+  where
+    parseFuncDef = do
+
+
+numExpr   = numTerm   `chainl1` addop
+numTerm   = numFactor `chainl1` mulop
+numFactor = parens numExpr <|> Lit . fromInteger <$> integer
+
+mulop  = Mul <$ symbol "*"
+      <|> Div <$ symbol "/"
+
+addop  = Add <$ symbol "+"
+      <|> Sub <$ symbol "-"

@@ -7,7 +7,7 @@ import Lib
 main = do
     path <- head <$> getArgs
     src <- readFile path
-    expr <- parse src
+    let expr = parse src
     runRuby emptyREnv $ eval expr
 
 
