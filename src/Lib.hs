@@ -260,3 +260,22 @@ eval (HashNew es) = do
     return $ RHash hsh
 
 
+parse :: String -> Expr
+parse _ = Stmts [FuncCall "p" [Lit 34], FuncCall "p" [expr2]]
+  where
+    expr2 =
+        Mul
+            (Mul
+                (Div
+                    (Add
+                        (Lit 1)
+                        (Lit 2))
+                    (Lit 3))
+                (Lit 4))
+            (Add
+                (Add
+                    (Div
+                        (Lit 56)
+                        (Lit 7))
+                    (Lit 8))
+                (Lit 9))
