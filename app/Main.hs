@@ -1,8 +1,3 @@
-{-# LANGUAGE KindSignatures #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 module Main where
 
 import qualified Data.Vector as V
@@ -45,7 +40,7 @@ main = do
         ]
     putStrLn " * fib"
     void $ runRuby emptyREnv $ eval $ Stmts
-        [ FuncDef "fib" ["x"] (If (Lt (VarRef "x") (Lit 2)) (VarRef "x") (Add
+        [ FuncDef "fib" ["x"] (If (LtEq (VarRef "x") (Lit 1)) (VarRef "x") (Add
                     (FuncCall "fib" [Sub (VarRef "x") (Lit 1)])
                     (FuncCall "fib" [Sub (VarRef "x") (Lit 2)])
                 )
@@ -54,13 +49,14 @@ main = do
         , FuncCall "p" [FuncCall "fib" [Lit 7]]
         , FuncCall "p" [FuncCall "fib" [Lit 9]]
         ]
-    putStrLn " * array assign"
+    putStrLn " * Array assign"
     void $ runRuby emptyREnv $ eval $ Stmts
-        [ VarAssign "ary" (AryNew [Lit 1])
+        [ VarAssign "ary" (AryNew [Lit 3, Lit 5, Lit 7])
         , AryAssign (VarRef "ary") (Lit 0) (Lit 42)
         , FuncCall "p" [AryRef (VarRef "ary") (Lit 0)]
+        , FuncCall "p" [VarRef "ary"]
         ]
-    putStrLn " * array assign"
+    putStrLn " * Hash assign"
     void $ runRuby emptyREnv $ eval $ Stmts
         [ VarAssign "hash" (HashNew [(Lit 0, Lit 3), (Lit 1, Lit 4)])
         , AryAssign (VarRef "hash") (Lit 0) (Lit 43)

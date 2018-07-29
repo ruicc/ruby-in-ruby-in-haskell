@@ -59,7 +59,7 @@ instance ShowIO RValue where
     showIO (RAry vec) = do
         ls <- V.toList <$> V.freeze vec
         showList <- mapM showIO ls
-        return $ "RAry " ++ (concat $ intersperse "," showList)
+        return $ "RAry [" ++ (concat $ intersperse "," showList) ++ "]"
     showIO (RHash hashRef) = do
         hash <- readIORef hashRef
         strList <- forM (toList hash) $ \(k,v) -> do
@@ -94,6 +94,8 @@ data Expr where
     VarRef :: String -> Expr
     Gt :: Expr -> Expr -> Expr
     Lt :: Expr -> Expr -> Expr
+    GtEq :: Expr -> Expr -> Expr
+    LtEq :: Expr -> Expr -> Expr
     Eq :: Expr -> Expr -> Expr
     If :: Expr -> Expr -> Expr -> Expr
     While :: Expr -> Expr -> Expr
@@ -169,6 +171,18 @@ eval (Lt e1 e2) = do
     let n1 = case v1 of { RInt n -> n; _ -> error "Expected RInt" }
     let n2 = case v2 of { RInt n -> n; _ -> error "Expected RInt" }
     return $ RBool $ n1 < n2
+eval (GtEq e1 e2) = do
+    v1 <- eval e1
+    v2 <- eval e2
+    let n1 = case v1 of { RInt n -> n; _ -> error "Expected RInt" }
+    let n2 = case v2 of { RInt n -> n; _ -> error "Expected RInt" }
+    return $ RBool $ n1 >= n2
+eval (LtEq e1 e2) = do
+    v1 <- eval e1
+    v2 <- eval e2
+    let n1 = case v1 of { RInt n -> n; _ -> error "Expected RInt" }
+    let n2 = case v2 of { RInt n -> n; _ -> error "Expected RInt" }
+    return $ RBool $ n1 <= n2
 eval (Eq e1 e2) = do
     v1 <- eval e1
     v2 <- eval e2
